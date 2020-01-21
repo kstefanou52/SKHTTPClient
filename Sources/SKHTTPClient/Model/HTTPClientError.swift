@@ -8,7 +8,7 @@
 
 import Foundation
 
-public class HTTPClientError<T: Codable>: Error {
+public final class HTTPClientError<T: Codable>: Error {
     
     let statusCode: Int?
     let type: Code

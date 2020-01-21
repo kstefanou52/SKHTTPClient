@@ -8,21 +8,21 @@
 
 import Foundation
 
-@objc public class HTTPClient: NSObject {
+@objc open class HTTPClient: NSObject {
     
     //MARK: - Properties
     
-    public var session: URLSession { URLSession(configuration: .default) }
+    open var session: URLSession { URLSession(configuration: .default) }
     
-    public var serverURL: URL { URL(string: "")! }
+    open var serverURL: URL { URL(string: "")! }
     
-    public var printResponse: Bool { true }
+    open var printResponse: Bool { true }
     
-    public private(set) var token: String? = nil
+    open private(set) var token: String? = nil
     
     //MARK: - Functionality
     
-    public func setTokenInHeaders(withKey key: String, andValue value: String?) {
+    open func setTokenInHeaders(withKey key: String, andValue value: String?) {
         if var httpAdditionalHeaders = session.configuration.httpAdditionalHeaders {
             httpAdditionalHeaders[key] = value
         } else {
@@ -31,7 +31,7 @@ import Foundation
         token = value
     }
     
-    public func createURLRequest(endPoint: URL, method: HTTPClientConfigurations.Method, urlParams: [String: Any] = [:], headers: [String: String]? = nil, body: [String: Any]? = nil) -> URLRequest? {
+    open func createURLRequest(endPoint: URL, method: HTTPClientConfigurations.Method, urlParams: [String: Any] = [:], headers: [String: String]? = nil, body: [String: Any]? = nil) -> URLRequest? {
         var request = URLRequest(url: endPoint.appendingQueryParameters(urlParams))
         
         request.httpMethod = method.rawValue
@@ -44,7 +44,7 @@ import Foundation
         return request
     }
     
-    public func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
+    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
         
         session.dataTask(with: request) { (data, urlResponse, error) in
@@ -76,7 +76,7 @@ import Foundation
         }.resume()
     }
     
-    public func performURLDataTask(with url: URL, completion: @escaping(Data?) -> Void) {
+    open func performURLDataTask(with url: URL, completion: @escaping(Data?) -> Void) {
         session.dataTask(with: url) { (data, response, error) in
             guard let data = data, error == nil else { print(error.debugDescription) ; completion(nil) ; return }
             completion(data)
