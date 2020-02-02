@@ -51,9 +51,7 @@ import Foundation
             guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
             
             if self.printResponse {
-                print("URL : \(request.url?.absoluteString ?? "-")")
-                print("Status Code : \(statusCode)")
-                print(data?.prettyPrintedJSONString ?? "unable to print json-response")
+                self.printResponse(request, statusCode: statusCode, responseData: data)
             }
             
             guard Double(statusCode / 200) < 1.5 else { // all status codes begining with 2 are successfull
@@ -81,5 +79,20 @@ import Foundation
             guard let data = data, error == nil else { print(error.debugDescription) ; completion(nil) ; return }
             completion(data)
         }.resume()
+    }
+}
+
+// MARK: - Helpers
+
+extension HTTPClient {
+    
+    private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
+        print("🌍 - Network Call : \(request.httpMethod ?? "-") -> \(request.url?.absoluteString ?? "-")")
+        let isNetworkCallSuccesfull: Bool = Double(statusCode / 200) < 1.5
+        let statusCodeEmoji: String = isNetworkCallSuccesfull ? "✅" : "❌"
+        print("\(statusCodeEmoji) - Status Code : \(statusCode)")
+            
+        print(responseData?.prettyPrintedJSONString ?? "unable to print json-response")
+        print("\n")
     }
 }
