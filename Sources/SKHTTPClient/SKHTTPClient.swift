@@ -16,7 +16,7 @@ import Foundation
     
     open var serverURL: URL { URL(string: "")! }
     
-    open var printResponse: Bool { true }
+    open var settings: HTTPClientSettings { HTTPClientSettings() }
     
     open private(set) var token: String? = nil
     
@@ -45,12 +45,13 @@ import Foundation
     }
     
     open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
+        if settings.printRequest { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
         
         session.dataTask(with: request) { (data, urlResponse, error) in
             guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
             
-            if self.printResponse {
+            if self.settings.printResponse {
                 self.printResponse(request, statusCode: statusCode, responseData: data)
             }
             
@@ -85,14 +86,23 @@ import Foundation
 // MARK: - Helpers
 
 extension HTTPClient {
+    private func printRequest(_ request: URLRequest?) {
+        print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
+        
+        let headersData: Data? = NSKeyedArchiver.archivedData(withRootObject: request?.allHTTPHeaderFields as Any)
+        print("👨‍🚀 - Headers : \(headersData?.prettyPrintedJSONString ?? "")")
+        
+        print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "")")
+    }
     
     private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
-        print("🌍 - Network Call : \(request.httpMethod ?? "-") -> \(request.url?.absoluteString ?? "-")")
+        print("🌍 - Network Response : \(request.httpMethod ?? "-") -> \(request.url?.absoluteString ?? "-")")
+                
         let isNetworkCallSuccesfull: Bool = Double(statusCode / 200) < 1.5
         let statusCodeEmoji: String = isNetworkCallSuccesfull ? "✅" : "❌"
         print("\(statusCodeEmoji) - Status Code : \(statusCode)")
             
-        print(responseData?.prettyPrintedJSONString ?? "unable to print json-response")
+        print(responseData?.prettyPrintedJSONString ?? "")
         print("\n")
     }
 }
