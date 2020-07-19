@@ -38,8 +38,10 @@ import Foundation
         request.allHTTPHeaderFields = headers
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         
-        guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any, options: .prettyPrinted) else { print("unable to serialize data") ; return nil }
-        request.httpBody = bodyData
+        if let body = body {
+            guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any, options: .prettyPrinted) else { print("unable to serialize data") ; return nil }
+            request.httpBody = bodyData
+        }
         
         return request
     }
