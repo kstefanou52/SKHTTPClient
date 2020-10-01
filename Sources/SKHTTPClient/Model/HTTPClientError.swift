@@ -10,11 +10,11 @@ import Foundation
 
 public final class HTTPClientError<T: Codable>: Error {
     
-    let statusCode: Int?
-    let type: Code
-    let model: T?
+    public let statusCode: Int?
+    public let type: Code
+    public let model: T?
     
-    enum Code: Int {
+    public enum Code: Int {
         case none
         case invalidResponse
         case invalidRequest
@@ -24,7 +24,7 @@ public final class HTTPClientError<T: Codable>: Error {
         case SERVICE_UNAVAILABLE = 501
     }
     
-    required init(statusCode: Int? = nil, type: Code, model: T? = nil) {
+    public required init(statusCode: Int? = nil, type: Code, model: T? = nil) {
         self.statusCode = statusCode
         self.type = type
         self.model = model
