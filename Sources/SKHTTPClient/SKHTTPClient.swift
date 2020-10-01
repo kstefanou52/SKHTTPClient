@@ -12,32 +12,35 @@ import Foundation
     
     //MARK: - Properties
     
-    open var session: URLSession { URLSession(configuration: .default) }
+    open var session: URLSession = URLSession(configuration: .default)
     
-    open var serverURL: URL { URL(string: "")! }
+    open var serverURL: URL?
     
     open var settings: HTTPClientSettings { HTTPClientSettings() }
-    
-    open private(set) var token: String? = nil
+
+    open var commonHeaders: [String: String] = ["application/json; charset=utf-8": "Content-Type"]
+        
+    open var authorizationType: HTTPClientConfigurations.AuthorizationType?
     
     //MARK: - Functionality
     
-    open func setTokenInHeaders(withKey key: String, andValue value: String?) {
-        if var httpAdditionalHeaders = session.configuration.httpAdditionalHeaders {
-            httpAdditionalHeaders[key] = value
-        } else {
-            session.configuration.httpAdditionalHeaders = [key: value as Any]
-        }
-        token = value
-    }
-    
-    open func createURLRequest(endPoint: URL, method: HTTPClientConfigurations.Method, urlParams: [String: Any] = [:], headers: [String: String]? = nil, body: [String: Any]? = nil) -> URLRequest? {
+    open func createURLRequest(endPoint: URL, method: HTTPClientConfigurations.Method, urlParams: [String: Any] = [:], headers: [String: String] = [:], body: [String: Any]? = nil) -> URLRequest? {
         var request = URLRequest(url: endPoint.appendingQueryParameters(urlParams))
         
         request.httpMethod = method.rawValue
-        request.allHTTPHeaderFields = headers
-        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = settings.timeoutInternval
+        request.allHTTPHeaderFields = commonHeaders.merging(headers) { (_, new) in new }
         
+        if let authType = authorizationType {
+            if let authHeaders = injectAuthHeaderIfAny(authType: authType) {
+                request.allHTTPHeaderFields = request.allHTTPHeaderFields?.merging(authHeaders) { (_, new) in new }
+            }
+            
+            if let authUrlParam = injectAuthURLParamIfAny(authType: authType) {
+                request.url = request.url?.appendingQueryParameters(authUrlParam)
+            }
+        }
+
         if let body = body {
             guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any, options: .prettyPrinted) else { print("unable to serialize data") ; return nil }
             request.httpBody = bodyData
@@ -88,6 +91,25 @@ import Foundation
 // MARK: - Helpers
 
 extension HTTPClient {
+    
+    private func injectAuthHeaderIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
+        switch authType {
+        case .none: return nil
+        case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
+            guard addToProperty == .header else { return nil }
+            return [key: value]
+        }
+    }
+    
+    private func injectAuthURLParamIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
+        switch authType {
+        case .none: return nil
+        case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
+            guard addToProperty == .url else { return nil }
+            return [key: value]
+        }
+    }
+    
     private func printRequest(_ request: URLRequest?) {
         print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
         

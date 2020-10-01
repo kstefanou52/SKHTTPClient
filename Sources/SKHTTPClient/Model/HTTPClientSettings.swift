@@ -12,4 +12,5 @@ public struct HTTPClientSettings {
     public var printResponse: Bool = true
     public var printRequest: Bool = true
     
+    public var timeoutInternval: TimeInterval = 60
 }
