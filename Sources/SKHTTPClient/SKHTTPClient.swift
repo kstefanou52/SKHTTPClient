@@ -14,13 +14,17 @@ import Foundation
     
     open var session: URLSession = URLSession(configuration: .default)
     
-    open var serverURL: URL?
+    open var serverURL: URL
     
     open var settings: HTTPClientSettings { HTTPClientSettings() }
 
     open var commonHeaders: [String: String] = ["application/json; charset=utf-8": "Content-Type"]
         
     open var authorizationType: HTTPClientConfigurations.AuthorizationType?
+    
+    public init(serverURL: URL) {
+        self.serverURL = serverURL
+    }
     
     //MARK: - Functionality
     
