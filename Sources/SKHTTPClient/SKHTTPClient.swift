@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Combine
 
 @objc open class HTTPClient: NSObject {
     
@@ -82,6 +83,24 @@ import Foundation
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
             }
         }.resume()
+    }
+    
+    @available(OSX 10.15, *)
+    @available(iOS 13, *)
+    open func getPublisher<T: Codable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
+        guard let request = request else { return nil }
+        if settings.printRequest { printRequest(request) }
+        
+        return session.dataTaskPublisher(for: request)
+            .map({ [weak self] in
+                if (self?.settings.printResponse ?? false) {
+                    let statusCode = ($0.response as? HTTPURLResponse)?.statusCode ?? 0
+                    self?.printResponse(request, statusCode: statusCode, responseData: $0.data)
+                }
+                return $0.data
+            })
+            .decode(type: T.self, decoder: JSONDecoder())
+            .eraseToAnyPublisher()
     }
     
     open func performURLDataTask(with url: URL, completion: @escaping(Data?) -> Void) {
