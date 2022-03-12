@@ -55,10 +55,15 @@ import Combine
     }
     
     open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
+        guard let urlDataTask = getURLDataTask(with: request, completion: completion) else { return }
+        urlDataTask.resume()
+    }
+    
+    open func getURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
         if settings.printRequest { printRequest(request) }
-        guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
+        guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
-        session.dataTask(with: request) { (data, urlResponse, error) in
+        return session.dataTask(with: request) { (data, urlResponse, error) in
             guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
             
             if self.settings.printResponse {
@@ -82,7 +87,7 @@ import Combine
                 let decodedErrorData = try? JSONDecoder().decode(U.self, from: data)
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
             }
-        }.resume()
+        }
     }
     
     @available(OSX 10.15, *)
