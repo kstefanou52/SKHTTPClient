@@ -19,7 +19,7 @@ import Combine
     
     open var settings: HTTPClientSettings { HTTPClientSettings() }
 
-    open var commonHeaders: [String: String] = ["application/json; charset=utf-8": "Content-Type"]
+    open var commonHeaders: [String: String] = ["Content-Type": "application/json; charset=utf-8"]
         
     open var authorizationType: HTTPClientConfigurations.AuthorizationType?
     
