@@ -29,7 +29,11 @@ import Combine
     
     //MARK: - Functionality
     
-    open func createURLRequest(endPoint: URL, method: HTTPClientConfigurations.Method, urlParams: [String: Any] = [:], headers: [String: String] = [:], body: [String: Any]? = nil) -> URLRequest? {
+    open func createURLRequest(endPoint: URL,
+                               method: HTTPClientConfigurations.Method,
+                               urlParams: [String: Any] = [:],
+                               headers: [String: String] = [:],
+                               body: [String: Any]? = nil) -> URLRequest? {
         var request = URLRequest(url: endPoint.appendingQueryParameters(urlParams))
         
         request.httpMethod = method.rawValue
@@ -47,7 +51,10 @@ import Combine
         }
 
         if let body = body {
-            guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any, options: .prettyPrinted) else { print("unable to serialize data") ; return nil }
+            guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any,
+                                                             options: .prettyPrinted) else {
+                print("🚫 - Creating Request: Unable to serialise data") ; return nil
+            }
             request.httpBody = bodyData
         }
         
@@ -70,7 +77,7 @@ import Combine
                 self.printResponse(request, statusCode: statusCode, responseData: data)
             }
             
-            guard Double(statusCode / 200) < 1.5 else { // all status codes begining with 2 are successfull
+            guard 200...299 ~= statusCode else {
                 let decodedErrorData = try? JSONDecoder().decode(U.self, from: data ?? Data())
                 
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .none, model: decodedErrorData))
@@ -122,16 +129,25 @@ extension HTTPClient {
     
     private func injectAuthHeaderIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
         switch authType {
-        case .none: return nil
+        case .none:
+            return nil
         case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
             guard addToProperty == .header else { return nil }
             return [key: value]
+        case let .basicAuth(username: username, password: password):
+            guard let basicAuthData = "\(username):\(password)".data(using: .utf8) else {
+                print("🚫 - Basic Auth: Unable to encode given credentials") ; return nil
+            }
+            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Basic \(basicAuthData.base64EncodedString())"]
+        case .bearer(token: let token):
+            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Bearer \(token)"]
         }
     }
     
     private func injectAuthURLParamIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
         switch authType {
-        case .none: return nil
+        case .none, .basicAuth, .bearer:
+            return nil
         case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
             guard addToProperty == .url else { return nil }
             return [key: value]
@@ -141,7 +157,7 @@ extension HTTPClient {
     private func printRequest(_ request: URLRequest?) {
         print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
         
-        let headersData: Data? = NSKeyedArchiver.archivedData(withRootObject: request?.allHTTPHeaderFields as Any)
+        let headersData: Data? = try? NSKeyedArchiver.archivedData(withRootObject: request?.allHTTPHeaderFields as Any, requiringSecureCoding: true)
         print("👨‍🚀 - Headers : \(headersData?.prettyPrintedJSONString ?? "")")
         
         print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "")")
@@ -150,8 +166,8 @@ extension HTTPClient {
     private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
         print("🌍 - Network Response : \(request.httpMethod ?? "-") -> \(request.url?.absoluteString ?? "-")")
                 
-        let isNetworkCallSuccesfull: Bool = Double(statusCode / 200) < 1.5
-        let statusCodeEmoji: String = isNetworkCallSuccesfull ? "✅" : "❌"
+        let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
+        let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
         print("\(statusCodeEmoji) - Status Code : \(statusCode)")
             
         print(responseData?.prettyPrintedJSONString ?? "")

@@ -28,6 +28,7 @@ public struct HTTPClientConfigurations {
     public enum AuthorizationType {
         case none
         case apiKey(key: String, value: String, addToProperty: HTTPClientConfigurations.Property)
+        case basicAuth(username: String, password: String)
+        case bearer(token: String)
     }
-    
 }
