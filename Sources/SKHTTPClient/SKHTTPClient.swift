@@ -66,11 +66,22 @@ import Combine
         urlDataTask.resume()
     }
     
+    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
+        let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
+            if let error = error {
+                completion(.failure(error))
+            }
+            completion(.success(result))
+        }
+        urlDataTask?.resume()
+    }
+    
     open func getURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
         if settings.printRequest { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
         return session.dataTask(with: request) { (data, urlResponse, error) in
+            guard error == nil else { completion(nil, HTTPClientError(type: .otherError(error))) ; return }
             guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
             
             if self.settings.printResponse {
@@ -84,7 +95,11 @@ import Combine
                 return
             }
             
-            guard let data = data, error == nil else { completion(nil, HTTPClientError(statusCode: statusCode, type: .invalidResponse)) ; return }
+            if data == nil, error == nil {
+                completion(nil, nil) ; return
+            }
+            
+            guard let data = data else { completion(nil, HTTPClientError(statusCode: statusCode, type: .invalidResponse)) ; return }
             
             do {
                 let decodedData = try JSONDecoder().decode(T.self, from: data)
@@ -119,7 +134,8 @@ import Combine
         session.dataTask(with: url) { (data, response, error) in
             guard let data = data, error == nil else { print(error.debugDescription) ; completion(nil) ; return }
             completion(data)
-        }.resume()
+        }
+        .resume()
     }
 }
 

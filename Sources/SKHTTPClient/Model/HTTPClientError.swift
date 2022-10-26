@@ -14,14 +14,15 @@ public final class HTTPClientError<T: Codable>: Error {
     public let type: Code
     public let model: T?
     
-    public enum Code: Int {
+    public enum Code {
         case none
         case invalidResponse
         case invalidRequest
         case parsingError
-        case AUTH_FAILED = 401
-        case FAILED = 500
-        case SERVICE_UNAVAILABLE = 501
+        case AUTH_FAILED
+        case FAILED
+        case SERVICE_UNAVAILABLE
+        case otherError(Error?)
     }
     
     public required init(statusCode: Int? = nil, type: Code, model: T? = nil) {
