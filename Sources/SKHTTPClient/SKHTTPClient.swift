@@ -66,16 +66,6 @@ import Combine
         urlDataTask.resume()
     }
     
-    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
-        let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
-            if let error = error {
-                completion(.failure(error))
-            }
-            completion(.success(result))
-        }
-        urlDataTask?.resume()
-    }
-    
     open func getURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
         if settings.printRequest { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
@@ -188,5 +178,28 @@ extension HTTPClient {
             
         print(responseData?.prettyPrintedJSONString ?? "")
         print("\n")
+    }
+}
+
+extension HTTPClient {
+    
+    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
+        let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
+            if let error = error {
+                completion(.failure(error))
+            }
+            completion(.success(result))
+        }
+        urlDataTask?.resume()
+    }
+    
+    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
+        let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
+            if let result = result {
+                completion(.success(result))
+            }
+            completion(.failure(error ?? .init(type: .invalidResponse)))
+        }
+        urlDataTask?.resume()
     }
 }
