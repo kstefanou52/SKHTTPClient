@@ -162,8 +162,8 @@ extension HTTPClient {
     
     private func printRequest(_ request: URLRequest?) {
         print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
-        print("👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "")")
-        print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "")")
+        print("👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-")")
+        print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "-")")
     }
     
     private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
