@@ -33,3 +33,11 @@ extension Data {
        return prettyPrintedString
    }
 }
+
+extension Dictionary {
+    
+    var prettyPrintedJSONString: NSString? {
+        let jsonData = try? JSONSerialization.data(withJSONObject: self, options: .prettyPrinted)
+        return jsonData?.prettyPrintedJSONString
+    }
+}

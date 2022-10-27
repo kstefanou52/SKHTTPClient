@@ -162,11 +162,7 @@ extension HTTPClient {
     
     private func printRequest(_ request: URLRequest?) {
         print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
-        
-        let headersData: Data? = try? NSKeyedArchiver.archivedData(withRootObject: request?.allHTTPHeaderFields as Any,
-                                                                   requiringSecureCoding: false)
-        print("👨‍🚀 - Headers : \(headersData?.prettyPrintedJSONString ?? "")")
-        
+        print("👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "")")
         print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "")")
     }
     
