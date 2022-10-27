@@ -18,9 +18,9 @@ import Combine
     open var serverURL: URL
     
     open var settings: HTTPClientSettings { HTTPClientSettings() }
-
+    
     open var commonHeaders: [String: String] = ["Content-Type": "application/json; charset=utf-8"]
-        
+    
     open var authorizationType: HTTPClientConfigurations.AuthorizationType?
     
     public init(serverURL: URL) {
@@ -49,7 +49,7 @@ import Combine
                 request.url = request.url?.appendingQueryParameters(authUrlParam)
             }
         }
-
+        
         if let body = body {
             guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any,
                                                              options: .prettyPrinted) else {
@@ -163,7 +163,8 @@ extension HTTPClient {
     private func printRequest(_ request: URLRequest?) {
         print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
         
-        let headersData: Data? = try? NSKeyedArchiver.archivedData(withRootObject: request?.allHTTPHeaderFields as Any, requiringSecureCoding: true)
+        let headersData: Data? = try? NSKeyedArchiver.archivedData(withRootObject: request?.allHTTPHeaderFields as Any,
+                                                                   requiringSecureCoding: false)
         print("👨‍🚀 - Headers : \(headersData?.prettyPrintedJSONString ?? "")")
         
         print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "")")
@@ -171,11 +172,11 @@ extension HTTPClient {
     
     private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
         print("🌍 - Network Response : \(request.httpMethod ?? "-") -> \(request.url?.absoluteString ?? "-")")
-                
+        
         let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
         let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
         print("\(statusCodeEmoji) - Status Code : \(statusCode)")
-            
+        
         print(responseData?.prettyPrintedJSONString ?? "")
         print("\n")
     }
@@ -187,8 +188,9 @@ extension HTTPClient {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let error = error {
                 completion(.failure(error))
+            } else {
+                completion(.success(result))
             }
-            completion(.success(result))
         }
         urlDataTask?.resume()
     }
@@ -197,8 +199,9 @@ extension HTTPClient {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let result = result {
                 completion(.success(result))
+            } else {
+                completion(.failure(error ?? .init(type: .invalidResponse)))
             }
-            completion(.failure(error ?? .init(type: .invalidResponse)))
         }
         urlDataTask?.resume()
     }
