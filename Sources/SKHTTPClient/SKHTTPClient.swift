@@ -37,7 +37,7 @@ import Combine
         var request = URLRequest(url: endPoint.appendingQueryParameters(urlParams))
         
         request.httpMethod = method.rawValue
-        request.timeoutInterval = settings.timeoutInternval
+        request.timeoutInterval = settings.timeoutInterval
         request.allHTTPHeaderFields = commonHeaders.merging(headers) { (_, new) in new }
         
         if let authType = authorizationType {
