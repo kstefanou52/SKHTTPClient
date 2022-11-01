@@ -13,4 +13,6 @@ public struct HTTPClientSettings {
     public var printRequest: Bool = true
     
     public var timeoutInternval: TimeInterval = 60
+    
+    public var customJSONDecoder: JSONDecoder?
 }

@@ -70,8 +70,8 @@ import Combine
         if settings.printRequest { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
-        return session.dataTask(with: request) { (data, urlResponse, error) in
-            guard error == nil else { completion(nil, HTTPClientError(type: .otherError(error))) ; return }
+        return session.dataTask(with: request) { [weak self] (data, urlResponse, error) in
+            guard let self = self, error == nil else { completion(nil, HTTPClientError(type: .otherError(error))) ; return }
             guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
             
             if self.settings.printResponse {
@@ -79,7 +79,7 @@ import Combine
             }
             
             guard 200...299 ~= statusCode else {
-                let decodedErrorData = try? JSONDecoder().decode(U.self, from: data ?? Data())
+                let decodedErrorData = try? (self.settings.customJSONDecoder ??  JSONDecoder()).decode(U.self, from: data ?? Data())
                 
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .none, model: decodedErrorData))
                 return
@@ -92,11 +92,11 @@ import Combine
             guard let data = data else { completion(nil, HTTPClientError(statusCode: statusCode, type: .invalidResponse)) ; return }
             
             do {
-                let decodedData = try JSONDecoder().decode(T.self, from: data)
+                let decodedData = try (self.settings.customJSONDecoder ??  JSONDecoder()).decode(T.self, from: data)
                 completion(decodedData, nil)
             } catch {
                 print(error)
-                let decodedErrorData = try? JSONDecoder().decode(U.self, from: data)
+                let decodedErrorData = try? (self.settings.customJSONDecoder ??  JSONDecoder()).decode(U.self, from: data)
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
             }
         }
@@ -109,13 +109,13 @@ import Combine
         if settings.printRequest { printRequest(request) }
         
         return session.dataTaskPublisher(for: request)
-            .map({ [weak self] in
+            .map { [weak self] in
                 if (self?.settings.printResponse ?? false) {
                     let statusCode = ($0.response as? HTTPURLResponse)?.statusCode ?? 0
                     self?.printResponse(request, statusCode: statusCode, responseData: $0.data)
                 }
                 return $0.data
-            })
+            }
             .decode(type: T.self, decoder: JSONDecoder())
             .eraseToAnyPublisher()
     }
