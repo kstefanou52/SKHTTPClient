@@ -31,4 +31,10 @@ public struct HTTPClientConfigurations {
         case basicAuth(username: String, password: String)
         case bearer(token: String)
     }
+    
+    public enum BodyType {
+        case data(Data?)
+        case dictionary([String: Any])
+        case encodable(Encodable)
+    }
 }

@@ -33,7 +33,7 @@ import Combine
                                method: HTTPClientConfigurations.Method,
                                urlParams: [String: Any] = [:],
                                headers: [String: String] = [:],
-                               body: [String: Any]? = nil) -> URLRequest? {
+                               body: HTTPClientConfigurations.BodyType? = nil) -> URLRequest? {
         var request = URLRequest(url: endPoint.appendingQueryParameters(urlParams))
         
         request.httpMethod = method.rawValue
@@ -51,11 +51,25 @@ import Combine
         }
         
         if let body = body {
-            guard let bodyData = try? JSONSerialization.data(withJSONObject: body as Any,
-                                                             options: .prettyPrinted) else {
-                print("🚫 - Creating Request: Unable to serialise data") ; return nil
+            switch body {
+            case .data(let data):
+                request.httpBody = data
+            case .dictionary(let dictionary):
+                do {
+                    let data = try JSONSerialization.data(withJSONObject: dictionary as Any,
+                                                          options: .prettyPrinted)
+                    request.httpBody = data
+                } catch {
+                    print("🚫 - Creating Request: Unable to serialise data: \(error)") ; return nil
+                }
+            case .encodable(let encodable):
+                do {
+                    let data = try JSONEncoder().encode(encodable)
+                    request.httpBody = data
+                } catch {
+                    print("🚫 - Creating Request: Unable to encode data: \(error)") ; return nil
+                }
             }
-            request.httpBody = bodyData
         }
         
         return request
@@ -79,7 +93,7 @@ import Combine
             }
             
             guard 200...299 ~= statusCode else {
-                let decodedErrorData = try? (self.settings.customJSONDecoder ??  JSONDecoder()).decode(U.self, from: data ?? Data())
+                let decodedErrorData = try? (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data ?? Data())
                 
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .none, model: decodedErrorData))
                 return
@@ -92,11 +106,11 @@ import Combine
             guard let data = data else { completion(nil, HTTPClientError(statusCode: statusCode, type: .invalidResponse)) ; return }
             
             do {
-                let decodedData = try (self.settings.customJSONDecoder ??  JSONDecoder()).decode(T.self, from: data)
+                let decodedData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(T.self, from: data)
                 completion(decodedData, nil)
             } catch {
                 print(error)
-                let decodedErrorData = try? (self.settings.customJSONDecoder ??  JSONDecoder()).decode(U.self, from: data)
+                let decodedErrorData = try? (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data)
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
             }
         }
@@ -180,7 +194,8 @@ extension HTTPClient {
 
 extension HTTPClient {
     
-    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
+    public func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?,
+                                                           completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let error = error {
                 completion(.failure(error))
@@ -191,7 +206,8 @@ extension HTTPClient {
         urlDataTask?.resume()
     }
     
-    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
+    public func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?,
+                                                           completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let result = result {
                 completion(.success(result))
