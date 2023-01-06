@@ -35,6 +35,6 @@ public struct HTTPClientConfigurations {
     public enum BodyType {
         case data(Data?)
         case dictionary([String: Any])
-        case encodable(Encodable)
+        case encodable(Encodable, encoder: JSONEncoder = .init())
     }
 }

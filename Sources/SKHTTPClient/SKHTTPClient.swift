@@ -62,9 +62,9 @@ import Combine
                 } catch {
                     print("🚫 - Creating Request: Unable to serialise data: \(error)") ; return nil
                 }
-            case .encodable(let encodable):
+            case let .encodable(encodable, encoder):
                 do {
-                    let data = try JSONEncoder().encode(encodable)
+                    let data = try encoder.encode(encodable)
                     request.httpBody = data
                 } catch {
                     print("🚫 - Creating Request: Unable to encode data: \(error)") ; return nil
