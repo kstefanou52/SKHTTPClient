@@ -75,12 +75,12 @@ import Combine
         return request
     }
     
-    open func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
+    open func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
         guard let urlDataTask = getURLDataTask(with: request, completion: completion) else { return }
         urlDataTask.resume()
     }
     
-    open func getURLDataTask<T: Codable, U: Codable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
+    open func getURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
         if settings.printRequest { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
@@ -118,7 +118,7 @@ import Combine
     
     @available(OSX 10.15, *)
     @available(iOS 13, *)
-    open func getPublisher<T: Codable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
+    open func getPublisher<T: Decodable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
         guard let request = request else { return nil }
         if settings.printRequest { printRequest(request) }
         
@@ -194,7 +194,7 @@ extension HTTPClient {
 
 extension HTTPClient {
     
-    public func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?,
+    public func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
                                                            completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let error = error {
@@ -206,11 +206,23 @@ extension HTTPClient {
         urlDataTask?.resume()
     }
     
-    public func performURLDataTask<T: Codable, U: Codable>(with request: URLRequest?,
+    public func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
                                                            completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let result = result {
                 completion(.success(result))
+            } else {
+                completion(.failure(error ?? .init(type: .invalidResponse)))
+            }
+        }
+        urlDataTask?.resume()
+    }
+    
+    public func performURLDataTask<U: Decodable>(with request: URLRequest?,
+                                                 completion: @escaping(Result<Void, HTTPClientError<U>>) -> Void) {
+        let urlDataTask = getURLDataTask(with: request) { (result: HTTPClientVoid?, error: HTTPClientError<U>?) in
+            if result != nil {
+                completion(.success(()))
             } else {
                 completion(.failure(error ?? .init(type: .invalidResponse)))
             }
