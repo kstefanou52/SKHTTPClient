@@ -75,12 +75,14 @@ import Combine
         return request
     }
     
-    open func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
+    open func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
+                                                             completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
         guard let urlDataTask = getURLDataTask(with: request, completion: completion) else { return }
         urlDataTask.resume()
     }
     
-    open func getURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?, completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
+    open func getURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
+                                                         completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
         if settings.printRequest { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
@@ -131,6 +133,14 @@ import Combine
                 return $0.data
             }
             .decode(type: T.self, decoder: JSONDecoder())
+            .eraseToAnyPublisher()
+    }
+    
+    @available(OSX 10.15, *)
+    @available(iOS 13, *)
+    open func getPublisher(for url: URL) -> AnyPublisher<Data, URLError> {
+        return session.dataTaskPublisher(for: url)
+            .map(\.data)
             .eraseToAnyPublisher()
     }
     
