@@ -124,6 +124,8 @@ import Combine
         guard let request = request else { return nil }
         if settings.printRequest { printRequest(request) }
         
+        let decoder = settings.customJSONDecoder ?? JSONDecoder()
+        
         return session.dataTaskPublisher(for: request)
             .map { [weak self] in
                 if (self?.settings.printResponse ?? false) {
@@ -132,7 +134,7 @@ import Combine
                 }
                 return $0.data
             }
-            .decode(type: T.self, decoder: JSONDecoder())
+            .decode(type: T.self, decoder: decoder)
             .eraseToAnyPublisher()
     }
     
