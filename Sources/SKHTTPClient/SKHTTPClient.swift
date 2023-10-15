@@ -284,10 +284,19 @@ private extension HTTPClient {
     }
     
     private func printRequest(_ request: URLRequest?) {
+        let urlParams: String = {
+            guard let url = request?.url else { return " - " }
+            return URLComponents(url: url, resolvingAgainstBaseURL: true)?
+                .queryItems?
+                .map { "   ◦ \($0.name) : \($0.value ?? "-")" }
+                .joined(separator: "\n") ?? " - "
+        }()
+        
         logger.info("""
-                     📡 - Network Request : \(request?.httpMethod ?? "-") → \(request?.url?.absoluteString ?? "-") \n‏‏‎ ‎
-                    👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-") \n‏‏‎ ‎
-                    🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "-") \n‏‏‎ ‎
+                    📡 - Network Request : \(request?.httpMethod ?? "-") → \(request?.url?.absoluteString ?? "-")
+                    👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-")
+                    🔗 - Parameters : \n\(urlParams)
+                    🎛 - Body : \(request?.httpBody?.prettyPrintedJSONString ?? "-")
                     """)
     }
     
@@ -296,10 +305,10 @@ private extension HTTPClient {
         let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
         
         logger.info("""
-                     🌍 - Network Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-") \n‏‏‎ ‎
-                    \(statusCodeEmoji) - Status Code : \(statusCode) \n‏‏‎ ‎
-                    🎛 - Parameters : \(request.httpBody?.prettyPrintedJSONString ?? "-") \n‏‏‎ ‎
-                    \(responseData?.prettyPrintedJSONString ?? "") \n‏‏‎ ‎
+                    🌍 - Network Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-")
+                    \(statusCodeEmoji) - Status Code : \(statusCode)
+                    🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-")
+                    \(responseData?.prettyPrintedJSONString ?? "")
                     """)
     }
 }
