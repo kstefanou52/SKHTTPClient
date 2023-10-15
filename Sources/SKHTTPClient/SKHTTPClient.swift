@@ -6,16 +6,15 @@
 //  Copyright © 2020 silonk. All rights reserved.
 //
 
-import Foundation
+import OSLog
 import Combine
+import Foundation
 
 @objc open class HTTPClient: NSObject {
     
-    //MARK: - Properties
+    // Properties
     
     open var session: URLSession = URLSession(configuration: .default)
-    
-    open var serverURL: URL
     
     open var settings: HTTPClientSettings { HTTPClientSettings() }
     
@@ -23,11 +22,16 @@ import Combine
     
     open var authorizationType: HTTPClientConfigurations.AuthorizationType?
     
+    private let logger = Logger(subsystem: Bundle(for: HTTPClient.self).bundleIdentifier ?? "SKHTTPClient", category: "Network")
+    
+    // Dependencies
+    open var serverURL: URL
+    
     public init(serverURL: URL) {
         self.serverURL = serverURL
     }
     
-    //MARK: - Functionality
+    //MARK: - Implementation
     
     open func createURLRequest(endPoint: URL,
                                method: HTTPClientConfigurations.Method,
@@ -60,20 +64,27 @@ import Combine
                                                           options: .prettyPrinted)
                     request.httpBody = data
                 } catch {
-                    print("🚫 - Creating Request: Unable to serialise data: \(error)") ; return nil
+                    if settings.printRequest {
+                        logger.error("🚫 - Creating Request: Unable to serialise data: \(error)") ; return nil
+                    }
                 }
             case let .encodable(encodable, encoder):
                 do {
                     let data = try encoder.encode(encodable)
                     request.httpBody = data
                 } catch {
-                    print("🚫 - Creating Request: Unable to encode data: \(error)") ; return nil
+                    if settings.printRequest {
+                        logger.error("🚫 - Creating Request: Unable to encode data: \(error)") ; return nil
+                    }
                 }
             }
         }
         
         return request
     }
+    
+    // MARK: - Closure Based Methods
+    // can be overridden.
     
     open func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
                                                              completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
@@ -111,13 +122,35 @@ import Combine
                 let decodedData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(T.self, from: data)
                 completion(decodedData, nil)
             } catch {
-                print(error)
-                let decodedErrorData = try? (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data)
-                completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
+                if settings.printResponse { logger.error("🪛 - Parsing Error \(T.self): \(error)") }
+                
+                do {
+                    let decodedErrorData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data)
+                    completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
+                } catch {
+                    if settings.printResponse { logger.error("🪛 - Parsing Error \(U.self): \(error)") }
+                    completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: nil))
+                }
             }
         }
     }
     
+    open func performURLDataTask(with url: URL, completion: @escaping(Result<Data, Error>) -> Void) {
+        session.dataTask(with: url) { (data, response, error) in
+            if let data {
+                completion(.success(data))
+                return
+            }
+            if let error {
+                completion(.failure(error))
+            }
+        }
+        .resume()
+    }
+    
+    // MARK: - Combine Based
+    // can be overridden.
+
     @available(OSX 10.15, *)
     @available(iOS 13, *)
     open func getPublisher<T: Decodable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
@@ -145,69 +178,14 @@ import Combine
             .map(\.data)
             .eraseToAnyPublisher()
     }
-    
-    open func performURLDataTask(with url: URL, completion: @escaping(Data?) -> Void) {
-        session.dataTask(with: url) { (data, response, error) in
-            guard let data = data, error == nil else { print(error.debugDescription) ; completion(nil) ; return }
-            completion(data)
-        }
-        .resume()
-    }
 }
 
-// MARK: - Helpers
-
-extension HTTPClient {
-    
-    private func injectAuthHeaderIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
-        switch authType {
-        case .none:
-            return nil
-        case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
-            guard addToProperty == .header else { return nil }
-            return [key: value]
-        case let .basicAuth(username: username, password: password):
-            guard let basicAuthData = "\(username):\(password)".data(using: .utf8) else {
-                print("🚫 - Basic Auth: Unable to encode given credentials") ; return nil
-            }
-            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Basic \(basicAuthData.base64EncodedString())"]
-        case .bearer(token: let token):
-            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Bearer \(token)"]
-        }
-    }
-    
-    private func injectAuthURLParamIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
-        switch authType {
-        case .none, .basicAuth, .bearer:
-            return nil
-        case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
-            guard addToProperty == .url else { return nil }
-            return [key: value]
-        }
-    }
-    
-    private func printRequest(_ request: URLRequest?) {
-        print("📡 - Network Request : \(request?.httpMethod ?? "-") -> \(request?.url?.absoluteString ?? "-")")
-        print("👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-")")
-        print("🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "-")")
-    }
-    
-    private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
-        print("🌍 - Network Response : \(request.httpMethod ?? "-") -> \(request.url?.absoluteString ?? "-")")
-        
-        let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
-        let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
-        print("\(statusCodeEmoji) - Status Code : \(statusCode)")
-        
-        print(responseData?.prettyPrintedJSONString ?? "")
-        print("\n")
-    }
-}
+// MARK: - Closure Based Convenience Methods
 
 extension HTTPClient {
     
     public func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
-                                                           completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
+                                                               completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let error = error {
                 completion(.failure(error))
@@ -219,7 +197,7 @@ extension HTTPClient {
     }
     
     public func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
-                                                           completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
+                                                               completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let result = result {
                 completion(.success(result))
@@ -240,5 +218,88 @@ extension HTTPClient {
             }
         }
         urlDataTask?.resume()
+    }
+}
+
+// MARK: - Concurrency Based
+
+public extension HTTPClient {
+ 
+    func performURLDataTask<ResponseModel: Decodable, ErrorModel: Codable>(with request: URLRequest?,
+                                                                           errorModelType: ErrorModel.Type) async throws -> ResponseModel {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ResponseModel, Error>) in
+            performURLDataTask(with: request) { (result: Result<ResponseModel, HTTPClientError<ErrorModel>>) in
+                continuation.resume(with: result)
+            }
+        }
+    }
+    
+    func performURLDataTask(with url: URL) async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            performURLDataTask(with: url) { result in
+                continuation.resume(with: result)
+            }
+        }
+    }
+    
+    func performURLDataTask<ErrorModel: Codable>(with request: URLRequest?,
+                                                 errorModelType: ErrorModel.Type) async throws -> Void {
+        try await withCheckedThrowingContinuation { continuation in
+            performURLDataTask(with: request) { (result: Result<Void, HTTPClientError<ErrorModel>>) in
+                continuation.resume(with: result)
+            }
+        }
+    }
+}
+
+// MARK: - Helpers
+
+private extension HTTPClient {
+    
+    private func injectAuthHeaderIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
+        switch authType {
+        case .none:
+            return nil
+        case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
+            guard addToProperty == .header else { return nil }
+            return [key: value]
+        case let .basicAuth(username: username, password: password):
+            guard let basicAuthData = "\(username):\(password)".data(using: .utf8) else {
+                logger.error("🚫 - Basic Auth: Unable to encode given credentials") ; return nil
+            }
+            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Basic \(basicAuthData.base64EncodedString())"]
+        case .bearer(token: let token):
+            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Bearer \(token)"]
+        }
+    }
+    
+    private func injectAuthURLParamIfAny(authType: HTTPClientConfigurations.AuthorizationType) -> [String: String]? {
+        switch authType {
+        case .none, .basicAuth, .bearer:
+            return nil
+        case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
+            guard addToProperty == .url else { return nil }
+            return [key: value]
+        }
+    }
+    
+    private func printRequest(_ request: URLRequest?) {
+        logger.info("""
+                     📡 - Network Request : \(request?.httpMethod ?? "-") → \(request?.url?.absoluteString ?? "-") \n‏‏‎ ‎
+                    👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-") \n‏‏‎ ‎
+                    🎛 - Parameters : \(request?.httpBody?.prettyPrintedJSONString ?? "-") \n‏‏‎ ‎
+                    """)
+    }
+    
+    private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
+        let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
+        let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
+        
+        logger.info("""
+                     🌍 - Network Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-") \n‏‏‎ ‎
+                    \(statusCodeEmoji) - Status Code : \(statusCode) \n‏‏‎ ‎
+                    🎛 - Parameters : \(request.httpBody?.prettyPrintedJSONString ?? "-") \n‏‏‎ ‎
+                    \(responseData?.prettyPrintedJSONString ?? "") \n‏‏‎ ‎
+                    """)
     }
 }
