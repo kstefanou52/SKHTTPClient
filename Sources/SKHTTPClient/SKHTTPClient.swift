@@ -64,7 +64,7 @@ import Foundation
                                                           options: .prettyPrinted)
                     request.httpBody = data
                 } catch {
-                    if settings.printRequest {
+                    if settings.isLoggingRequestEnabled {
                         logger.error("🚫 - Creating Request: Unable to serialise data: \(error)") ; return nil
                     }
                 }
@@ -73,7 +73,7 @@ import Foundation
                     let data = try encoder.encode(encodable)
                     request.httpBody = data
                 } catch {
-                    if settings.printRequest {
+                    if settings.isLoggingRequestEnabled {
                         logger.error("🚫 - Creating Request: Unable to encode data: \(error)") ; return nil
                     }
                 }
@@ -94,14 +94,14 @@ import Foundation
     
     open func getURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
                                                          completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
-        if settings.printRequest { printRequest(request) }
+        if settings.isLoggingRequestEnabled { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
         return session.dataTask(with: request) { [weak self] (data, urlResponse, error) in
             guard let self = self, error == nil else { completion(nil, HTTPClientError(type: .otherError(error))) ; return }
             guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
             
-            if self.settings.printResponse {
+            if self.settings.isLoggingResponseEnabled {
                 self.printResponse(request, statusCode: statusCode, responseData: data)
             }
             
@@ -122,13 +122,13 @@ import Foundation
                 let decodedData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(T.self, from: data)
                 completion(decodedData, nil)
             } catch {
-                if settings.printResponse { logger.error("🪛 - Parsing Error \(T.self): \(error)") }
+                if settings.isLoggingResponseEnabled { logger.error("🪛 - Parsing Error \(T.self): \(error)") }
                 
                 do {
                     let decodedErrorData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data)
                     completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
                 } catch {
-                    if settings.printResponse { logger.error("🪛 - Parsing Error \(U.self): \(error)") }
+                    if settings.isLoggingResponseEnabled { logger.error("🪛 - Parsing Error \(U.self): \(error)") }
                     completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: nil))
                 }
             }
@@ -155,13 +155,13 @@ import Foundation
     @available(iOS 13, *)
     open func getPublisher<T: Decodable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
         guard let request = request else { return nil }
-        if settings.printRequest { printRequest(request) }
+        if settings.isLoggingRequestEnabled { printRequest(request) }
         
         let decoder = settings.customJSONDecoder ?? JSONDecoder()
         
         return session.dataTaskPublisher(for: request)
             .map { [weak self] in
-                if (self?.settings.printResponse ?? false) {
+                if (self?.settings.isLoggingResponseEnabled ?? false) {
                     let statusCode = ($0.response as? HTTPURLResponse)?.statusCode ?? 0
                     self?.printResponse(request, statusCode: statusCode, responseData: $0.data)
                 }
@@ -292,23 +292,41 @@ private extension HTTPClient {
                 .joined(separator: "\n") ?? " - "
         }()
         
-        logger.info("""
+        if settings.isLoggingRequestPrivacyPublic {
+            logger.info("""
+                    📡 - Network Request : \(request?.httpMethod ?? "-", privacy: .public) → \(request?.url?.absoluteString ?? "-", privacy: .public)
+                    👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-", privacy: .public)
+                    🔗 - Parameters : \n\(urlParams, privacy: .public)
+                    🎛 - Body : \(request?.httpBody?.prettyPrintedJSONString ?? "-", privacy: .public)
+                    """)
+        } else {
+            logger.info("""
                     📡 - Network Request : \(request?.httpMethod ?? "-") → \(request?.url?.absoluteString ?? "-")
                     👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-")
                     🔗 - Parameters : \n\(urlParams)
                     🎛 - Body : \(request?.httpBody?.prettyPrintedJSONString ?? "-")
                     """)
+        }
     }
     
     private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
         let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
         let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
         
-        logger.info("""
+        if settings.isLoggingResponsePrivacyPublic {
+            logger.info("""
+                    🌍 - Network Response : \(request.httpMethod ?? "-", privacy: .public) → \(request.url?.absoluteString ?? "-", privacy: .public)
+                    \(statusCodeEmoji, privacy: .public) - Status Code : \(statusCode, privacy: .public)
+                    🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-", privacy: .public)
+                    \(responseData?.prettyPrintedJSONString ?? "", privacy: .public)
+                    """)
+        } else {
+            logger.info("""
                     🌍 - Network Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-")
                     \(statusCodeEmoji) - Status Code : \(statusCode)
                     🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-")
                     \(responseData?.prettyPrintedJSONString ?? "")
                     """)
+        }
     }
 }
