@@ -22,7 +22,10 @@ import Foundation
     
     open var authorizationType: HTTPClientConfigurations.AuthorizationType?
     
-    private let logger = Logger(subsystem: Bundle(for: HTTPClient.self).bundleIdentifier ?? "SKHTTPClient", category: "Network")
+    private let logger = Logger(
+        subsystem: Bundle(for: HTTPClient.self).bundleIdentifier ?? "SKHTTPClient",
+        category: "Network"
+    )
     
     // Dependencies
     open var serverURL: URL
@@ -33,12 +36,19 @@ import Foundation
     
     //MARK: - Implementation
     
-    open func createURLRequest(endPoint: URL,
-                               method: HTTPClientConfigurations.Method,
-                               urlParams: [String: Any] = [:],
-                               headers: [String: String] = [:],
-                               body: HTTPClientConfigurations.BodyType? = nil) -> URLRequest? {
-        var request = URLRequest(url: endPoint.appendingQueryParameters(urlParams))
+    open func createURLRequest(
+        endPoint: URL,
+        method: HTTPClientConfigurations.Method,
+        headers: [String: String] = [:],
+        urlQuery: HTTPClientConfigurations.URLQueryType = .dictionary([:]),
+        body: HTTPClientConfigurations.BodyType? = nil
+    ) -> URLRequest? {
+        var request: URLRequest = {
+            switch urlQuery {
+            case .dictionary(let dictionary): URLRequest(url: endPoint.appendingQueryParameters(dictionary))
+            case .items(let items): URLRequest(url: endPoint.appendingQueryItems(items))
+            }
+        }()
         
         request.httpMethod = method.rawValue
         request.timeoutInterval = settings.timeoutInterval
@@ -86,20 +96,26 @@ import Foundation
     // MARK: - Closure Based Methods
     // can be overridden.
     
-    open func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
-                                                             completion: @escaping(T?, HTTPClientError<U>?) -> Void) {
+    open func performURLDataTask<T: Decodable, U: Decodable>(
+        with request: URLRequest?,
+        completion: @escaping(T?, HTTPClientError<U>?) -> Void
+    ) {
         guard let urlDataTask = getURLDataTask(with: request, completion: completion) else { return }
         urlDataTask.resume()
     }
     
-    open func getURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
-                                                         completion: @escaping(T?, HTTPClientError<U>?) -> Void) -> URLSessionDataTask? {
+    open func getURLDataTask<T: Decodable, U: Decodable>(
+        with request: URLRequest?,
+        completion: @escaping(T?, HTTPClientError<U>?) -> Void
+    ) -> URLSessionDataTask? {
         if settings.isLoggingRequestEnabled { printRequest(request) }
         guard let request = request else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return nil }
         
         return session.dataTask(with: request) { [weak self] (data, urlResponse, error) in
             guard let self = self, error == nil else { completion(nil, HTTPClientError(type: .otherError(error))) ; return }
-            guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else { completion(nil, HTTPClientError(type: .invalidResponse)) ; return }
+            guard let statusCode = (urlResponse as? HTTPURLResponse)?.statusCode else {
+                completion(nil, HTTPClientError(type: .invalidResponse)) ; return
+            }
             
             if self.settings.isLoggingResponseEnabled {
                 self.printResponse(request, statusCode: statusCode, responseData: data)
@@ -116,7 +132,9 @@ import Foundation
                 completion(nil, nil) ; return
             }
             
-            guard let data = data else { completion(nil, HTTPClientError(statusCode: statusCode, type: .invalidResponse)) ; return }
+            guard let data = data else {
+                completion(nil, HTTPClientError(statusCode: statusCode, type: .invalidResponse)) ; return
+            }
             
             do {
                 let decodedData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(T.self, from: data)
@@ -150,7 +168,7 @@ import Foundation
     
     // MARK: - Combine Based
     // can be overridden.
-
+    
     @available(OSX 10.15, *)
     @available(iOS 13, *)
     open func getPublisher<T: Decodable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
@@ -184,8 +202,10 @@ import Foundation
 
 extension HTTPClient {
     
-    public func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
-                                                               completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void) {
+    public func performURLDataTask<T: Decodable, U: Decodable>(
+        with request: URLRequest?,
+        completion: @escaping(Result<T?, HTTPClientError<U>>) -> Void
+    ) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let error = error {
                 completion(.failure(error))
@@ -196,8 +216,10 @@ extension HTTPClient {
         urlDataTask?.resume()
     }
     
-    public func performURLDataTask<T: Decodable, U: Decodable>(with request: URLRequest?,
-                                                               completion: @escaping(Result<T, HTTPClientError<U>>) -> Void) {
+    public func performURLDataTask<T: Decodable, U: Decodable>(
+        with request: URLRequest?,
+        completion: @escaping(Result<T, HTTPClientError<U>>) -> Void
+    ) {
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let result = result {
                 completion(.success(result))
@@ -208,8 +230,10 @@ extension HTTPClient {
         urlDataTask?.resume()
     }
     
-    public func performURLDataTask<U: Decodable>(with request: URLRequest?,
-                                                 completion: @escaping(Result<Void, HTTPClientError<U>>) -> Void) {
+    public func performURLDataTask<U: Decodable>(
+        with request: URLRequest?,
+        completion: @escaping(Result<Void, HTTPClientError<U>>) -> Void
+    ) {
         let urlDataTask = getURLDataTask(with: request) { (result: HTTPClientVoid?, error: HTTPClientError<U>?) in
             if result != nil {
                 completion(.success(()))
@@ -224,9 +248,11 @@ extension HTTPClient {
 // MARK: - Concurrency Based
 
 public extension HTTPClient {
- 
-    func performURLDataTask<ResponseModel: Decodable, ErrorModel: Codable>(with request: URLRequest?,
-                                                                           errorModelType: ErrorModel.Type) async throws -> ResponseModel {
+    
+    func performURLDataTask<ResponseModel: Decodable, ErrorModel: Codable>(
+        with request: URLRequest?,
+        errorModelType: ErrorModel.Type
+    ) async throws -> ResponseModel {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<ResponseModel, Error>) in
             performURLDataTask(with: request) { (result: Result<ResponseModel, HTTPClientError<ErrorModel>>) in
                 continuation.resume(with: result)
@@ -242,8 +268,10 @@ public extension HTTPClient {
         }
     }
     
-    func performURLDataTask<ErrorModel: Codable>(with request: URLRequest?,
-                                                 errorModelType: ErrorModel.Type) async throws -> Void {
+    func performURLDataTask<ErrorModel: Codable>(
+        with request: URLRequest?,
+        errorModelType: ErrorModel.Type
+    ) async throws -> Void {
         try await withCheckedThrowingContinuation { continuation in
             performURLDataTask(with: request) { (result: Result<Void, HTTPClientError<ErrorModel>>) in
                 continuation.resume(with: result)

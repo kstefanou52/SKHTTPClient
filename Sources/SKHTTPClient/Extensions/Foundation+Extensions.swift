@@ -20,6 +20,17 @@ extension URL {
         
         return urlComponents?.url ?? self
     }
+    
+    /// Append query parameters at the end of the given url, default fallback is the self.
+    /// - Parameter parameters: A dictionary with the parameters you want to append
+    public func appendingQueryItems(_ items: [URLQueryItem]) -> URL {
+        var urlComponents = URLComponents(url: self, resolvingAgainstBaseURL: true)
+        var currentItems = urlComponents?.queryItems ?? []
+        currentItems += items
+        urlComponents?.queryItems = currentItems
+        
+        return urlComponents?.url ?? self
+    }
 }
 
 extension Data {

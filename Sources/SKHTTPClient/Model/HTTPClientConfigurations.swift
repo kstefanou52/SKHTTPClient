@@ -37,4 +37,9 @@ public struct HTTPClientConfigurations {
         case dictionary([String: Any])
         case encodable(Encodable, encoder: JSONEncoder = .init())
     }
+    
+    public enum URLQueryType {
+        case dictionary([String: Any])
+        case items([URLQueryItem])
+    }
 }
