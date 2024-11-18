@@ -13,9 +13,6 @@ import Foundation
 @objc open class HTTPClient: NSObject {
     
     // Properties
-    
-    open var session: URLSession = URLSession(configuration: .default)
-    
     open var settings: HTTPClientSettings { HTTPClientSettings() }
     
     open var commonHeaders: [String: String] = ["Content-Type": "application/json; charset=utf-8"]
@@ -29,9 +26,13 @@ import Foundation
     
     // Dependencies
     open var serverURL: URL
+    public let session: URLSession
+    public let sessionDelegate: any URLSessionDelegate
     
-    public init(serverURL: URL) {
+    public init(serverURL: URL, session: URLSession? = nil) {
         self.serverURL = serverURL
+        self.sessionDelegate = session?.delegate ?? HTTPClientSessionDelegate()
+        self.session = session ?? URLSession(configuration: .default, delegate: sessionDelegate, delegateQueue: nil)
     }
     
     //MARK: - Implementation
@@ -278,6 +279,48 @@ public extension HTTPClient {
             }
         }
     }
+    
+    func performURLDataTask<ResponseModel: Decodable, ErrorModel: Codable>(
+        with request: URLRequest?,
+        errorModelType: ErrorModel.Type
+    ) -> AsyncThrowingStream<ResponseModel, Error> {
+        AsyncThrowingStream { [weak self] continuation in
+            guard let request, let self else {
+                continuation.finish(throwing: HTTPClientError<String?>(type: .invalidRequest))
+                return
+            }
+            
+            let dataTask = session.dataTask(with: request)
+            let sessionDelegate = (sessionDelegate as? HTTPClientSessionDelegate)
+            
+            let listener = HTTPClientSessionListener(
+                dataTaskId: dataTask.taskIdentifier,
+                onDidReceiveData: { [self] (task, data) in
+                    if self.settings.isLoggingResponseEnabled { self.printResponse(task, responseData: data) }
+                    let decoder = (self.settings.customJSONDecoder ?? JSONDecoder())
+                    do {
+                        let chunkResponse = try decoder.decode(ResponseModel.self, from: data)
+                        continuation.yield(chunkResponse)
+                    } catch {
+                        if self.settings.isLoggingResponseEnabled {
+                            self.logger.error("🪛 - Chunk Parsing Error \(ResponseModel.self): \(error)")
+                        }
+                    }
+                }, onDidCompleteWithError: { task, error in
+                    continuation.finish(throwing: error)
+                })
+            
+            sessionDelegate?.addSessionListener(listener)
+            dataTask.resume()
+            
+            if settings.isLoggingRequestEnabled { printRequest(request) }
+            
+            continuation.onTermination = { _ in
+                dataTask.cancel()
+                sessionDelegate?.removeSessionListener(dataTask.taskIdentifier)
+            }
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -295,7 +338,9 @@ private extension HTTPClient {
             guard let basicAuthData = "\(username):\(password)".data(using: .utf8) else {
                 logger.error("🚫 - Basic Auth: Unable to encode given credentials") ; return nil
             }
-            return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Basic \(basicAuthData.base64EncodedString())"]
+            return [
+                HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Basic \(basicAuthData.base64EncodedString())"
+            ]
         case .bearer(token: let token):
             return [HTTPClientConfigurations.authorizationHTTPHeaderFieldKey: "Bearer \(token)"]
         }
@@ -354,6 +399,22 @@ private extension HTTPClient {
                     \(statusCodeEmoji) - Status Code : \(statusCode)
                     🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-")
                     \(responseData?.prettyPrintedJSONString ?? "")
+                    """)
+        }
+    }
+    
+    private func printResponse(_ task: URLSessionDataTask, responseData: Data) {
+        if settings.isLoggingResponsePrivacyPublic {
+            logger.info("""
+                    📦 - Network Chunk Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-", privacy: .public)
+                    🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-", privacy: .public)
+                    \(responseData.prettyPrintedJSONString ?? "", privacy: .public)
+                    """)
+        } else {
+            logger.info("""
+                    📦 - Network Chunk Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-")
+                    🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-", privacy: .public)
+                    \(responseData.prettyPrintedJSONString ?? "", privacy: .public)
                     """)
         }
     }
