@@ -118,12 +118,13 @@ import Foundation
                 completion(nil, HTTPClientError(type: .invalidResponse)) ; return
             }
             
+            let decoder = self.settings.customJSONDecoder ?? JSONDecoder()
             if self.settings.isLoggingResponseEnabled {
                 self.printResponse(request, statusCode: statusCode, responseData: data)
             }
             
             guard 200...299 ~= statusCode else {
-                let decodedErrorData = try? (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data ?? Data())
+                let decodedErrorData = try? decoder.decode(U.self, from: data ?? Data())
                 
                 completion(nil, HTTPClientError(statusCode: statusCode, type: .none, model: decodedErrorData))
                 return
@@ -144,7 +145,7 @@ import Foundation
                 if settings.isLoggingResponseEnabled { logger.error("🪛 - Parsing Error \(T.self): \(error)") }
                 
                 do {
-                    let decodedErrorData = try (self.settings.customJSONDecoder ?? JSONDecoder()).decode(U.self, from: data)
+                    let decodedErrorData = try decoder.decode(U.self, from: data)
                     completion(nil, HTTPClientError(statusCode: statusCode, type: .parsingError, model: decodedErrorData))
                 } catch {
                     if settings.isLoggingResponseEnabled { logger.error("🪛 - Parsing Error \(U.self): \(error)") }
@@ -291,29 +292,40 @@ public extension HTTPClient {
             }
             
             let dataTask = session.dataTask(with: request)
+            
             let sessionDelegate = (sessionDelegate as? HTTPClientSessionDelegate)
+            let decoder = (self.settings.customJSONDecoder ?? JSONDecoder())
             
             let listener = HTTPClientSessionListener(
                 dataTaskId: dataTask.taskIdentifier,
-                onDidReceiveData: { [self] (task, data) in
+                onDidReceiveData: { [weak self] (task, data) in
+                    guard let self else { return }
                     if self.settings.isLoggingResponseEnabled { self.printResponse(task, responseData: data) }
-                    let decoder = (self.settings.customJSONDecoder ?? JSONDecoder())
+                    
                     do {
                         let chunkResponse = try decoder.decode(ResponseModel.self, from: data)
                         continuation.yield(chunkResponse)
                     } catch {
                         if self.settings.isLoggingResponseEnabled {
-                            self.logger.error("🪛 - Chunk Parsing Error \(ResponseModel.self): \(error)")
+                            self.logger.error(
+                                """
+                                🪛 - Chunk Parsing Error \(ResponseModel.self): \n \(error) \n 
+                                Raw Response: \(String(data: data, encoding: .utf8) ?? "-")
+                                """
+                            )
                         }
                     }
                 }, onDidCompleteWithError: { task, error in
+                    if self.settings.isLoggingResponseEnabled {
+                        self.logger.info("📥 - Chunk Response Finished")
+                    }
                     continuation.finish(throwing: error)
                 })
             
             sessionDelegate?.addSessionListener(listener)
             dataTask.resume()
             
-            if settings.isLoggingRequestEnabled { printRequest(request) }
+            if self.settings.isLoggingRequestEnabled { printRequest(request) }
             
             continuation.onTermination = { _ in
                 dataTask.cancel()
@@ -408,13 +420,11 @@ private extension HTTPClient {
             logger.info("""
                     📦 - Network Chunk Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-", privacy: .public)
                     🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-", privacy: .public)
-                    \(responseData.prettyPrintedJSONString ?? "", privacy: .public)
                     """)
         } else {
             logger.info("""
                     📦 - Network Chunk Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-")
-                    🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-", privacy: .public)
-                    \(responseData.prettyPrintedJSONString ?? "", privacy: .public)
+                    🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-")
                     """)
         }
     }
