@@ -66,13 +66,14 @@ import Foundation
         }
         
         if let body = body {
+            let jsonEncoder: JSONEncoder = (settings.customJSONEncoder ?? JSONEncoder())
+            
             switch body {
             case .data(let data):
                 request.httpBody = data
             case .dictionary(let dictionary):
                 do {
-                    let data = try JSONSerialization.data(withJSONObject: dictionary as Any,
-                                                          options: .prettyPrinted)
+                    let data = try dictionary.encodeToData(using: jsonEncoder)
                     request.httpBody = data
                 } catch {
                     if settings.isLoggingRequestEnabled {
@@ -81,7 +82,7 @@ import Foundation
                 }
             case let .encodable(encodable, encoder):
                 do {
-                    let data = try encoder.encode(encodable)
+                    let data = try (encoder ?? jsonEncoder).encode(encodable)
                     request.httpBody = data
                 } catch {
                     if settings.isLoggingRequestEnabled {

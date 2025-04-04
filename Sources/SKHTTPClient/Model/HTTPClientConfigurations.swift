@@ -34,8 +34,8 @@ public struct HTTPClientConfigurations {
     
     public enum BodyType {
         case data(Data?)
-        case dictionary([String: Any])
-        case encodable(Encodable, encoder: JSONEncoder = .init())
+        case dictionary([String: Encodable])
+        case encodable(Encodable, encoder: JSONEncoder? = nil)
     }
     
     public enum URLQueryType {
