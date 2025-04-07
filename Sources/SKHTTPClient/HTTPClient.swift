@@ -95,6 +95,41 @@ import Foundation
         return request
     }
     
+    open func getCachedResponse(for request: URLRequest) -> CachedURLResponse? {
+        return session.configuration.urlCache?.cachedResponse(for: request)
+    }
+    
+    open func decodeCacheResponse<ResponseModel: Decodable>(for request: URLRequest?) -> ResponseModel? {
+        guard let request else { return nil }
+        
+        if let cachedResponse = self.getCachedResponse(for: request) {
+            do {
+                let decoder = (self.settings.customJSONDecoder ?? JSONDecoder())
+                let cachedModel = try decoder.decode(ResponseModel.self, from: cachedResponse.data)
+                
+                if self.settings.isLoggingResponseEnabled {
+                    let statusCode = (cachedResponse.response as? HTTPURLResponse)?.statusCode ?? 0
+                    self.printResponse(
+                        request,
+                        statusCode: statusCode,
+                        responseData: cachedResponse.data,
+                        cached: true
+                    )
+                }
+                return cachedModel
+            } catch {
+                if self.settings.isLoggingResponseEnabled {
+                    self.logger.error(" - Cache Parsing Error \(ResponseModel.self): \(error)")
+                }
+            }
+        } else {
+            if self.settings.isLoggingResponseEnabled {
+                self.logger.info("⚠️ No cache data found for \(request.url?.absoluteString ?? "unknown")")
+            }
+        }
+        return nil
+    }
+    
     // MARK: - Closure Based Methods
     // can be overridden.
     
@@ -199,6 +234,19 @@ import Foundation
             .map(\.data)
             .eraseToAnyPublisher()
     }
+    
+    @available(OSX 10.15, *)
+    @available(iOS 13, *)
+    open func getPublisherWithForwardCache<T: Decodable>(with request: URLRequest?) -> AnyPublisher<T, Error>? {
+        let prependElements: [T] = {
+            guard let cachedResponse: T = decodeCacheResponse(for: request) else { return [] }
+            return [cachedResponse]
+        }()
+        
+        return getPublisher(with: request)?
+            .prepend(prependElements)
+            .eraseToAnyPublisher()
+    }
 }
 
 // MARK: - Closure Based Convenience Methods
@@ -223,6 +271,23 @@ extension HTTPClient {
         with request: URLRequest?,
         completion: @escaping(Result<T, HTTPClientError<U>>) -> Void
     ) {
+        let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
+            if let result = result {
+                completion(.success(result))
+            } else {
+                completion(.failure(error ?? .init(type: .invalidResponse)))
+            }
+        }
+        urlDataTask?.resume()
+    }
+    
+    public func performURLDataTaskWithForwardCache<T: Decodable, U: Decodable>(
+        with request: URLRequest?,
+        completion: @escaping(Result<T, HTTPClientError<U>>) -> Void
+    ) {
+        if let cachedResponse: T = decodeCacheResponse(for: request) {
+            completion(.success(cachedResponse))
+        }
         let urlDataTask = getURLDataTask(with: request) { (result: T?, error: HTTPClientError<U>?) in
             if let result = result {
                 completion(.success(result))
@@ -334,6 +399,40 @@ public extension HTTPClient {
             }
         }
     }
+    
+    func performURLDataTaskWithForwardCache<ResponseModel: Decodable, ErrorModel: Codable>(
+        with request: URLRequest?,
+        errorModelType: ErrorModel.Type
+    ) -> AsyncThrowingStream<ResponseModel, Error> {
+        AsyncThrowingStream { [weak self] continuation in
+            guard let request, let self else {
+                continuation.finish(throwing: HTTPClientError<String?>(type: .invalidRequest))
+                return
+            }
+                
+            let dataTask = getURLDataTask(with: request) { (
+                response: ResponseModel?,
+                error: HTTPClientError<ErrorModel>?
+            ) in
+                if let response {
+                    continuation.yield(response)
+                    continuation.finish()
+                } else {
+                    continuation.finish(throwing: error)
+                }
+            }
+            
+            if let cachedResponse: ResponseModel = self.decodeCacheResponse(for: request) {
+                continuation.yield(cachedResponse)
+            }
+            
+            dataTask?.resume()
+            
+            continuation.onTermination = { _ in
+                dataTask?.cancel()
+            }
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -395,20 +494,22 @@ private extension HTTPClient {
         }
     }
     
-    private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?) {
+    private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?, cached: Bool = false) {
         let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
         let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
+        let responseEmoji: String = cached ? "💾" : "🌍"
+        let responseTypeText: String = cached ? "Cached" : "Network"
         
         if settings.isLoggingResponsePrivacyPublic {
             logger.info("""
-                    🌍 - Network Response : \(request.httpMethod ?? "-", privacy: .public) → \(request.url?.absoluteString ?? "-", privacy: .public)
+                    \(responseEmoji) - \(responseTypeText) Response : \(request.httpMethod ?? "-", privacy: .public) → \(request.url?.absoluteString ?? "-", privacy: .public)
                     \(statusCodeEmoji, privacy: .public) - Status Code : \(statusCode, privacy: .public)
                     🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-", privacy: .public)
                     \(responseData?.prettyPrintedJSONString ?? "", privacy: .public)
                     """)
         } else {
             logger.info("""
-                    🌍 - Network Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-")
+                    \(responseEmoji) - \(responseTypeText) Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-")
                     \(statusCodeEmoji) - Status Code : \(statusCode)
                     🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-")
                     \(responseData?.prettyPrintedJSONString ?? "")
