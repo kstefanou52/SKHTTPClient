@@ -16,6 +16,7 @@ public struct HTTPClientConfigurations {
         case GET
         case POST
         case PUT
+        case PATCH
         case DELETE
     }
     
