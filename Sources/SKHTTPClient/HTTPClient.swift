@@ -19,7 +19,7 @@ import Foundation
     
     open var authorizationType: HTTPClientConfigurations.AuthorizationType?
     
-    private let logger = Logger(
+    let logger = Logger(
         subsystem: Bundle(for: HTTPClient.self).bundleIdentifier ?? "SKHTTPClient",
         category: "Network"
     )
@@ -433,6 +433,71 @@ public extension HTTPClient {
             }
         }
     }
+    
+    @available(iOS 18.0, *)
+    func getEventStreamWithJSONData<JSONDataType: Decodable>(
+        with request: URLRequest?
+    ) async throws -> any AsyncSequence<ServerSentEventWithJSONData<JSONDataType>, Error> {
+        guard let request else {
+            throw HTTPClientError<String?>(type: .invalidRequest)
+        }
+
+        if settings.isLoggingRequestEnabled { printRequest(request) }
+        
+        let (asyncBytes, response) = try await session.bytes(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw HTTPClientError<String?>(type: .invalidResponse)
+        }
+
+        if self.settings.isLoggingResponseEnabled { self.printResponse(httpResponse) }
+        
+        let decoder = settings.customJSONDecoder ?? JSONDecoder()
+
+        return asyncBytes
+            .chunkedSSERawEvents()
+            .printResponse(
+                isLoggingResponseEnabled: settings.isLoggingResponseEnabled,
+                isLoggingResponsePrivacyPublic: settings.isLoggingResponsePrivacyPublic,
+                response: httpResponse,
+                logger: logger
+            )
+            .asDecodedServerSentEventsWithJSONData(of: JSONDataType.self, decoder: decoder)
+    }
+    
+    @available(iOS 15.0, *)
+    func getEventStreamWithJSONData<JSONDataType: Decodable>(
+        with request: URLRequest?
+    ) async throws -> AsyncThrowingStream<ServerSentEventWithJSONData<JSONDataType>, Error> {
+        guard let request else {
+            throw HTTPClientError<String?>(type: .invalidRequest)
+        }
+
+        if settings.isLoggingRequestEnabled { printRequest(request) }
+        
+        let (asyncBytes, response) = try await session.bytes(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              200...299 ~= httpResponse.statusCode else {
+            throw HTTPClientError<String?>(type: .invalidResponse)
+        }
+
+        if self.settings.isLoggingResponseEnabled { self.printResponse(httpResponse) }
+        
+        let decoder = settings.customJSONDecoder ?? JSONDecoder()
+
+        return asyncBytes
+            .chunkedSSERawEvents()
+            .printResponse(
+                isLoggingResponseEnabled: settings.isLoggingResponseEnabled,
+                isLoggingResponsePrivacyPublic: settings.isLoggingResponsePrivacyPublic,
+                response: httpResponse,
+                logger: logger
+            )
+            .asDecodedServerSentEventsWithJSONData(of: JSONDataType.self, decoder: decoder)
+            .asAsyncThrowingStream()
+    }
 }
 
 // MARK: - Helpers
@@ -465,69 +530,6 @@ private extension HTTPClient {
         case .apiKey(key: let key, value: let value, addToProperty: let addToProperty):
             guard addToProperty == .url else { return nil }
             return [key: value]
-        }
-    }
-    
-    private func printRequest(_ request: URLRequest?) {
-        let urlParams: String = {
-            guard let url = request?.url else { return " - " }
-            return URLComponents(url: url, resolvingAgainstBaseURL: true)?
-                .queryItems?
-                .map { "   ◦ \($0.name) : \($0.value ?? "-")" }
-                .joined(separator: "\n") ?? " - "
-        }()
-        
-        if settings.isLoggingRequestPrivacyPublic {
-            logger.info("""
-                    📡 - Network Request : \(request?.httpMethod ?? "-", privacy: .public) → \(request?.url?.absoluteString ?? "-", privacy: .public)
-                    👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-", privacy: .public)
-                    🔗 - Parameters : \n\(urlParams, privacy: .public)
-                    🎛 - Body : \(request?.httpBody?.prettyPrintedJSONString ?? "-", privacy: .public)
-                    """)
-        } else {
-            logger.info("""
-                    📡 - Network Request : \(request?.httpMethod ?? "-") → \(request?.url?.absoluteString ?? "-")
-                    👨‍🚀 - Headers : \(request?.allHTTPHeaderFields?.prettyPrintedJSONString ?? "-")
-                    🔗 - Parameters : \n\(urlParams)
-                    🎛 - Body : \(request?.httpBody?.prettyPrintedJSONString ?? "-")
-                    """)
-        }
-    }
-    
-    private func printResponse(_ request: URLRequest, statusCode: Int, responseData: Data?, cached: Bool = false) {
-        let isNetworkCallSuccessful: Bool = 200...299 ~= statusCode
-        let statusCodeEmoji: String = isNetworkCallSuccessful ? "✅" : "❌"
-        let responseEmoji: String = cached ? "💾" : "🌍"
-        let responseTypeText: String = cached ? "Cached" : "Network"
-        
-        if settings.isLoggingResponsePrivacyPublic {
-            logger.info("""
-                    \(responseEmoji) - \(responseTypeText) Response : \(request.httpMethod ?? "-", privacy: .public) → \(request.url?.absoluteString ?? "-", privacy: .public)
-                    \(statusCodeEmoji, privacy: .public) - Status Code : \(statusCode, privacy: .public)
-                    🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-", privacy: .public)
-                    \(responseData?.prettyPrintedJSONString ?? "", privacy: .public)
-                    """)
-        } else {
-            logger.info("""
-                    \(responseEmoji) - \(responseTypeText) Response : \(request.httpMethod ?? "-") → \(request.url?.absoluteString ?? "-")
-                    \(statusCodeEmoji) - Status Code : \(statusCode)
-                    🎛 - Body : \(request.httpBody?.prettyPrintedJSONString ?? "-")
-                    \(responseData?.prettyPrintedJSONString ?? "")
-                    """)
-        }
-    }
-    
-    private func printResponse(_ task: URLSessionDataTask, responseData: Data) {
-        if settings.isLoggingResponsePrivacyPublic {
-            logger.info("""
-                    📦 - Network Chunk Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-", privacy: .public)
-                    🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-", privacy: .public)
-                    """)
-        } else {
-            logger.info("""
-                    📦 - Network Chunk Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-")
-                    🎛 - Body : \(responseData.prettyPrintedJSONString ?? "-")
-                    """)
         }
     }
 }
