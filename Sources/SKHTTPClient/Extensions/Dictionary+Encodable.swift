@@ -12,7 +12,7 @@ extension Dictionary where Key == String, Value == Encodable {
     func encodeToData(using encoder: JSONEncoder = .init()) throws -> Data {
         let dict = self.mapValues { value -> Any in
             if let jsonData = try? encoder.encode(value),
-               let jsonObject = try? JSONSerialization.jsonObject(with: jsonData) {
+               let jsonObject = try? JSONSerialization.jsonObject(with: jsonData, options: .fragmentsAllowed) {
                 return jsonObject
             }
             return value
