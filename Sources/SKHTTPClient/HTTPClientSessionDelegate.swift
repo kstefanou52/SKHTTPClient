@@ -5,6 +5,7 @@
 //  Created by Kostis Stefanou on 18/11/24.
 //
 
+import OSLog
 import Foundation
 
 open class HTTPClientSessionListener {
@@ -27,6 +28,11 @@ open class HTTPClientSessionListener {
 open class HTTPClientSessionDelegate: NSObject, URLSessionDataDelegate {
     
     private var sessionListeners: [HTTPClientSessionListener] = []
+    private let logger: Logger?
+    
+    init(logger: Logger? = nil) {
+        self.logger = logger
+    }
     
     public func addSessionListener(_ listener: HTTPClientSessionListener) {
         sessionListeners.append(listener)
@@ -46,5 +52,30 @@ open class HTTPClientSessionDelegate: NSObject, URLSessionDataDelegate {
         if let sessionListener = sessionListeners.first(where: { $0.dataTaskId == task.taskIdentifier }) {
             sessionListener.onDidCompleteWithError?(task, error)
         }
+    }
+}
+
+extension HTTPClientSessionDelegate: URLSessionWebSocketDelegate {
+    
+    public func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        logger?.info("""
+            🔌 - WebSocket Did Open : \(webSocketTask.currentRequest?.url?.absoluteString ?? "-")
+            """)
+    }
+    
+    public func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        logger?.info("""
+            🚪 - WebSocket Did Close : \(webSocketTask.currentRequest?.url?.absoluteString ?? "-")
+            💬 - Reason : \(closeCode.rawValue) \n\(String(data: reason ?? .init(), encoding: .utf8) ?? "-")
+            """)
     }
 }

@@ -91,6 +91,41 @@ extension HTTPClient {
                         """)
         }
     }
+    
+    func printWebSocketMessage(_ task: URLSessionWebSocketTask, message: URLSessionWebSocketTask.Message) {
+        let messageString: String = {
+            switch message {
+            case .data(let data): String(data: data, encoding: .utf8) ?? " - "
+            case .string(let text): text
+            @unknown default: "Unsupported message type"
+            }
+        }()
+        if settings.isLoggingResponsePrivacyPublic {
+            logger.info("""
+                        ⚡️ - WebSocket Message Response: \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-", privacy: .public)
+                        💬 - Body : \(messageString, privacy: .public)
+                        """)
+        } else {
+            logger.info("""
+                        ⚡️ - WebSocket Message Response : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-")
+                        💬 - Body : \(messageString)
+                        """)
+        }
+    }
+    
+    func printWebSocketError(_ task: URLSessionWebSocketTask, error: any Error) {
+        if settings.isLoggingResponsePrivacyPublic {
+            logger.error("""
+                        ❌ - WebSocket Error : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-", privacy: .public)
+                        ℹ️ - Error : \(error.localizedDescription, privacy: .public)
+                        """)
+        } else {
+            logger.error("""
+                        ❌ - WebSocket Error : \(task.originalRequest?.httpMethod ?? "-", privacy: .public) → \(task.originalRequest?.url?.absoluteString ?? "-")
+                        ℹ️ - Error : \(error.localizedDescription)
+                        """)
+        }
+    }
 }
 
 extension AsyncSequence where Element == ArraySlice<UInt8> {
