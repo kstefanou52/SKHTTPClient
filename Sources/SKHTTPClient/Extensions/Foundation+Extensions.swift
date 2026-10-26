@@ -16,7 +16,7 @@ extension URL {
         var urlComponents = URLComponents(url: self, resolvingAgainstBaseURL: true)
         var items = urlComponents?.queryItems ?? []
         items += parameters.map({ URLQueryItem(name: $0, value: "\($1)") })
-        urlComponents?.queryItems = items
+        urlComponents?.queryItems = items.isEmpty ? nil : items
         
         return urlComponents?.url ?? self
     }
@@ -27,7 +27,7 @@ extension URL {
         var urlComponents = URLComponents(url: self, resolvingAgainstBaseURL: true)
         var currentItems = urlComponents?.queryItems ?? []
         currentItems += items
-        urlComponents?.queryItems = currentItems
+        urlComponents?.queryItems = currentItems.isEmpty ? nil : currentItems
         
         return urlComponents?.url ?? self
     }

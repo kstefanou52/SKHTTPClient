@@ -18,7 +18,7 @@ A lightweight HTTP client for Swift built on top of `URLSession`. It gives you o
 - iOS 14+ / macOS 11+
 - Swift 5.5+
 
-Some features need newer OS versions: Server-Sent Events need iOS 15 (or iOS 18 for the `any AsyncSequence` variant).
+Some features need newer OS versions: Server-Sent Events need iOS 15 / macOS 12 (or iOS 18 / macOS 15 for the `any AsyncSequence` variant).
 
 ## Installation
 
@@ -368,8 +368,16 @@ Logs go through `OSLog` with the subsystem set to your bundle identifier and the
 
 ## Testing
 
-Run the tests on an iOS simulator:
+Run the tests on macOS:
+
+```sh
+swift test
+```
+
+Or on an iOS simulator:
 
 ```sh
 xcodebuild test -scheme SKHTTPClient -destination 'platform=iOS Simulator,name=<device>'
 ```
+
+The tests use a stub `URLProtocol` (`Tests/SKHTTPClientTests/Helpers/StubURLProtocol.swift`), so they don't touch the network.

@@ -14,16 +14,14 @@ final class HTTPClientPollingTests: XCTestCase {
     override func setUp() {
         super.setUp()
         StubURLProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [StubURLProtocol.self]
-        let session = URLSession(configuration: configuration)
+        let session = StubURLProtocol.makeSession()
         let serverURL = URL(string: "https://polling.test")!
         client = HTTPClient(serverURL: serverURL, session: session)
         request = client.createURLRequest(endPoint: serverURL.appendingPathComponent("status"), method: .GET)
     }
     
     func testStreamStopsWhenConditionIsMet() async throws {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         
         var values: [Int] = []
         let stream: AsyncThrowingStream<Status, Error> = client.poll(
@@ -39,7 +37,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testStreamStopsAtMaxAttempts() async throws {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         
         var values: [Int] = []
         let stream: AsyncThrowingStream<Status, Error> = client.poll(
@@ -53,7 +51,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testStreamThrowsOnTimeout() async {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         
         let stream: AsyncThrowingStream<Status, Error> = client.poll(
             with: self.request,
@@ -72,7 +70,7 @@ final class HTTPClientPollingTests: XCTestCase {
     
     func testStreamToleratesConsecutiveFailures() async throws {
         StubURLProtocol.responder = { attempt in
-            attempt == 2 ? (500, Data()) : (200, try! JSONEncoder().encode(Status(value: attempt)))
+            attempt == 2 ? .status(500) : .json(Status(value: attempt))
         }
         
         var values: [Int] = []
@@ -87,7 +85,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testStreamThrowsAfterTooManyFailures() async {
-        StubURLProtocol.responder = { _ in (500, Data()) }
+        StubURLProtocol.responder = { _ in .status(500) }
         
         let stream: AsyncThrowingStream<Status, Error> = client.poll(
             with: self.request,
@@ -106,7 +104,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testCancellingConsumerTaskStopsPolling() async throws {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         
         let task = Task {
             let stream: AsyncThrowingStream<Status, Error> = client.poll(
@@ -128,7 +126,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testPollerCancelStopsCallbacksAndCallsOnFinish() async throws {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         let finished = expectation(description: "onFinish")
         
         let poller = client.startPolling(
@@ -152,7 +150,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testAsyncPollReturnsMatchingValue() async throws {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         
         let status: Status = try await client.poll(
             with: self.request,
@@ -165,7 +163,7 @@ final class HTTPClientPollingTests: XCTestCase {
     }
     
     func testAsyncPollThrowsWhenMaxAttemptsReached() async {
-        StubURLProtocol.responder = { attempt in (200, try! JSONEncoder().encode(Status(value: attempt))) }
+        StubURLProtocol.responder = { attempt in .json(Status(value: attempt)) }
         
         do {
             let _: Status = try await client.poll(
@@ -183,39 +181,3 @@ final class HTTPClientPollingTests: XCTestCase {
     }
 }
 
-// MARK: - Stub
-
-private final class StubURLProtocol: URLProtocol {
-    
-    private static let lock = NSLock()
-    private static var _requestCount = 0
-    static var responder: (Int) -> (Int, Data) = { _ in (200, Data()) }
-    
-    static var requestCount: Int {
-        lock.lock(); defer { lock.unlock() }
-        return _requestCount
-    }
-    
-    static func reset() {
-        lock.lock(); defer { lock.unlock() }
-        _requestCount = 0
-    }
-    
-    override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    
-    override func startLoading() {
-        Self.lock.lock()
-        Self._requestCount += 1
-        let attempt = Self._requestCount
-        Self.lock.unlock()
-        
-        let (statusCode, data) = Self.responder(attempt)
-        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: data)
-        client?.urlProtocolDidFinishLoading(self)
-    }
-    
-    override func stopLoading() {}
-}

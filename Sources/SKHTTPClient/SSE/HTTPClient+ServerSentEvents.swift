@@ -11,7 +11,7 @@ import Foundation
 
 public extension HTTPClient {
     
-    @available(iOS 18.0, *)
+    @available(iOS 18.0, macOS 15.0, *)
     func getEventStreamWithJSONData<JSONDataType: Decodable>(
         with request: URLRequest?
     ) async throws -> any AsyncSequence<ServerSentEventWithJSONData<JSONDataType>, Error> {
@@ -43,7 +43,7 @@ public extension HTTPClient {
             .asDecodedServerSentEventsWithJSONData(of: JSONDataType.self, decoder: decoder)
     }
     
-    @available(iOS 15.0, *)
+    @available(iOS 15.0, macOS 12.0, *)
     func getEventStreamWithJSONData<JSONDataType: Decodable>(
         with request: URLRequest?
     ) async throws -> AsyncThrowingStream<ServerSentEventWithJSONData<JSONDataType>, Error> {
