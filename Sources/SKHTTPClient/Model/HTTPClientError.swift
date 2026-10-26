@@ -22,6 +22,8 @@ public final class HTTPClientError<T: Codable>: Error {
         case AUTH_FAILED
         case FAILED
         case SERVICE_UNAVAILABLE
+        case pollingTimeout
+        case pollingMaxAttemptsReached
         case otherError(Error?)
     }
     
