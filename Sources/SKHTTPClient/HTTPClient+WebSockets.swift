@@ -113,26 +113,51 @@ public extension HTTPClient {
         }
     }
     
+    /// A dead connection (e.g. half-open after a Wi-Fi drop) never fails `receive` on its own, so the task would
+    /// stay `.running` forever. A ping that errors or gets no pong in time cancels the task, letting the caller
+    /// see it complete and reconnect.
     private func sendPing(_ task: URLSessionWebSocketTask, every seconds: UInt64) async {
-        try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
-        
-        guard task.state == .running else {
-            logger.info("✋ - Ping stopped: WebSocket task is not running.")
-            return
+        while true {
+            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+
+            guard task.state == .running else {
+                logger.info("✋ - Ping stopped: WebSocket task is not running.")
+                return
+            }
+
+            if settings.isLoggingRequestEnabled {
+                logger.info("🙋 - Ping Sent")
+            }
+
+            if let error = await ping(task, timeout: seconds) {
+                logger.error("❌ - Pong Responded with Error : \(error.localizedDescription)")
+                task.cancel(with: .goingAway, reason: error.localizedDescription.data(using: .utf8))
+                return
+            }
+
+            if settings.isLoggingResponseEnabled {
+                logger.info("🏓 - Pong Received")
+            }
         }
-        
-        if self.settings.isLoggingRequestEnabled ?? false {
-            logger.info("🙋 - Ping Sent")
-        }
-        
-        task.sendPing { [weak self] error in
-            guard self?.settings.isLoggingResponseEnabled ?? false else { return }
-            if let error {
-                self?.logger.error("❌ - Pong Responded with Error : \(error.localizedDescription)")
-            } else {
-                self?.logger.info("🏓 - Pong Received")
-                
-                Task { try? await self?.sendPing(task, every: seconds) }
+    }
+
+    /// `sendPing`'s handler may never be called on a dead connection, hence the timeout.
+    private func ping(_ task: URLSessionWebSocketTask, timeout seconds: UInt64) async -> Error? {
+        await withCheckedContinuation { continuation in
+            let lock = NSLock()
+            var isResumed = false
+
+            func resume(_ error: Error?) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !isResumed else { return }
+                isResumed = true
+                continuation.resume(returning: error)
+            }
+
+            task.sendPing { error in resume(error) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + .seconds(Int(seconds))) {
+                resume(URLError(.timedOut))
             }
         }
     }
